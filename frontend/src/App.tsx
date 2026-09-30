@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Play, Copy, QrCode, Link as LinkIcon, Plus, Edit2, Trash2, Server } from 'lucide-react';
+import { Play, Copy, QrCode, Link as LinkIcon, Plus, Edit2, Trash2, Server, Radio, Zap, TrendingUp, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 
 type UserStatus = 'ACTIVE' | 'DISABLED' | 'EXPIRED';
 
@@ -313,7 +313,7 @@ export default function App() {
             <StatCard icon="📊" title="ترافیک" value={formatBytes(stats.totalTraffic)} accent="cyan" tooltip="ترافیک کل" />
             <StatCard icon="⏳" title="منقضی" value={stats.expiredUsers} accent="orange" tooltip="کاربران منقضی" />
             <StatCard icon="🔗" title="Inbound" value={inbounds.length} accent="purple" tooltip="تعداد inbound" />
-            <StatCard icon="🖥" title="سرور" value={stats.serverStatus} accent="blue" tooltip="وضعیت سرور" />
+            <StatCard icon="🖥️" title="سرور" value={stats.serverStatus} accent="blue" tooltip="وضعیت سرور" />
           </section>
         )}
 
@@ -393,7 +393,7 @@ export default function App() {
                 <div className="inbound-card glass-card" key={inbound.id}>
                   <div className="inbound-header">
                     <div className="inbound-title">
-                      <Server size={20} />
+                      <Radio size={20} />
                       <div>
                         <h3>{inbound.name}</h3>
                         <span className="protocol-badge">{inbound.protocol}</span>
@@ -446,10 +446,14 @@ export default function App() {
             </div>
 
             <div className="settings-grid">
-              <SettingCard title="📍 آدرس پنل" description="آپدیت آدرس برای نمایش در Inbound ها" action={() => setShowDomainPrompt(true)} />
-              <SettingCard title="🔐 مدیر" description="تغییر رمز عبور مدیر" />
-              <SettingCard title="🌐 CORS" description="دسترسی‌های ورودی و ارتباطات" />
-              <SettingCard title="💾 دیتابیس" description="اتصال PostgreSQL و تنظیمات" />
+              <SettingCard icon="📍" title="آدرس پنل" description="آپدیت آدرس برای نمایش در Inbound ها" action={() => setShowDomainPrompt(true)} />
+              <SettingCard icon="🔐" title="مدیر" description="تغیر رمز عبور مدیر" />
+              <SettingCard icon="🌐" title="CORS" description="دسترسی‌های ورودی و ارتباطات" />
+              <SettingCard icon="💾" title="دیتابیس" description="اتصال PostgreSQL و تنظیمات" />
+              <SettingCard icon="⚡" title="پرفرمنس" description="تنظیمات سرعت و بهینه‌سازی" />
+              <SettingCard icon="📡" title="API" description="کلید‌های API و توکن‌های دسترسی" />
+              <SettingCard icon="🔔" title="اعلانات" description="تنظیم سیستم اعلانات" />
+              <SettingCard icon="📋" title="لاگ‌ها" description="مشاهده لاگ‌های سیستم" />
             </div>
           </section>
         )}
@@ -479,11 +483,11 @@ function ActionButton({ icon, label, onClick, danger }: { icon: ReactNode; label
   );
 }
 
-function SettingCard({ title, description, action }: { title: string; description: string; action?: () => void }) {
+function SettingCard({ icon, title, description, action }: { icon: string; title: string; description: string; action?: () => void }) {
   return (
     <div className="setting-card glass-card">
       <div>
-        <h3>{title}</h3>
+        <h3>{icon} {title}</h3>
         <p>{description}</p>
       </div>
       <button className="btn-action" onClick={() => { action?.(); playClickSound(); }}>تنظیم</button>
