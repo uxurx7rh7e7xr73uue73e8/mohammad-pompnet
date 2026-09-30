@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+  EXPIRED
+}
+
+enum InboundStatus {
+  ACTIVE
+  DISABLED
+  EXPIRED
+}
+
+model User {
+  id              String      @id @default(cuid())
+  username        String      @unique
+  passwordHash    String
+  status          UserStatus  @default(ACTIVE)
+  trafficUsed     Int         @default(0)
+  trafficLimit    Int         @default(0)
+  trafficRemaining Int        @default(0)
+  expiryDate      DateTime?
+  online          Boolean     @default(false)
+  connections     Int         @default(1)
+  protocol        String      @default("VLESS")
+  subscriptionUrl String?
+  qrCodeUrl       String?
+  configLink      String?
+  lastSeenAt      DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model Inbound {
+  id          String           @id @default(cuid())
+  name        String
+  protocol    String
+  port        Int
+  status      InboundStatus    @default(ACTIVE)
+  trafficUsed Int              @default(0)
+  trafficLimit Int             @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
