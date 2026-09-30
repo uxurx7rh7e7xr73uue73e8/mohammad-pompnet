@@ -1,0 +1,429 @@
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Play, Copy, QrCode, Link as LinkIcon, Plus, Edit2, Trash2 } from 'lucide-react';
+
+type UserStatus = 'ACTIVE' | 'DISABLED' | 'EXPIRED';
+
+type DashboardStats = {
+  totalUsers: number;
+  activeUsers: number;
+  disabledUsers: number;
+  expiredUsers: number;
+  onlineUsers: number;
+  totalTraffic: number;
+  totalInbounds: number;
+  serverStatus: string;
+};
+
+type User = {
+  id: string;
+  username: string;
+  status: UserStatus;
+  online: boolean;
+  trafficUsed: number;
+  trafficRemaining: number;
+  expiryDate?: string | null;
+  protocol: string;
+  connections: number;
+  subscriptionUrl?: string;
+  configLink?: string;
+  qrCodeUrl?: string;
+};
+
+type Inbound = {
+  id: string;
+  name: string;
+  protocol: string;
+  port: number;
+  status: string;
+  trafficUsed: number;
+  trafficLimit: number;
+};
+
+const formatBytes = (value: number) => {
+  const units = ['MB', 'GB', 'TB'];
+  let size = value;
+  let unitIndex = 0;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  return `${size.toFixed(1)} ${units[unitIndex]}`;
+};
+
+const playClickSound = () => {
+  try {
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.value = 740;
+    gain.gain.value = 0.04;
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.08);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.08);
+  } catch {
+    // silent fallback for browsers without audio API
+  }
+};
+
+const initialStats: DashboardStats = {
+  totalUsers: 0,
+  activeUsers: 0,
+  disabledUsers: 0,
+  expiredUsers: 0,
+  onlineUsers: 0,
+  totalTraffic: 0,
+  totalInbounds: 0,
+  serverStatus: 'Loading',
+};
+
+export default function App() {
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('pompnet-token'));
+  const [username, setUsername] = useState('admin');
+  const [password, setPassword] = useState('ChangeMe123!');
+  const [stats, setStats] = useState<DashboardStats>(initialStats);
+  const [users, setUsers] = useState<User[]>([]);
+  const [inbounds, setInbounds] = useState<Inbound[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'inbounds' | 'settings'>('dashboard');
+
+  const playSound = () => playClickSound();
+
+  const fetcher = async <T,>(path: string): Promise<T> => {
+    const response = await fetch(path, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Request failed: ${response.status}`);
+    }
+
+    return response.json() as Promise<T>;
+  };
+
+  const loadDashboard = async () => {
+    if (!token) return;
+
+    try {
+      const [dashboard, userList, inboundList] = await Promise.all([
+        fetcher<DashboardStats>('/api/dashboard/stats'),
+        fetcher<User[]>('/api/users'),
+        fetcher<Inbound[]>('/api/inbounds'),
+      ]);
+
+      setStats(dashboard);
+      setUsers(userList);
+      setInbounds(inboundList);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  useEffect(() => {
+    if (token) {
+      loadDashboard();
+      const interval = setInterval(loadDashboard, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [token]);
+
+  const handleLogin = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setLoading(true);
+    playSound();
+
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Login failed');
+      }
+
+      localStorage.setItem('pompnet-token', data.token);
+      setToken(data.token);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredUsers = useMemo(() => {
+    return users.filter((user) => {
+      const query = search.trim().toLowerCase();
+      if (!query) return true;
+      return user.username.toLowerCase().includes(query) || user.protocol.toLowerCase().includes(query);
+    });
+  }, [users, search]);
+
+  const logout = () => {
+    playSound();
+    localStorage.removeItem('pompnet-token');
+    setToken(null);
+  };
+
+  if (!token) {
+    return (
+      <div className="auth-shell">
+        <div className="auth-bg" />
+        <div className="login-panel glass-card">
+          <div className="brand-wrap">
+            <div className="brand-mark">P</div>
+            <div>
+              <div className="title-main">محمد پمپ نت</div>
+              <div className="title-sub">PompNet | Fast • Secure • Unlimited</div>
+            </div>
+          </div>
+
+          <form onSubmit={handleLogin} className="login-form">
+            <label>
+              نام کاربری
+              <input value={username} onChange={(e) => setUsername(e.target.value)} />
+            </label>
+            <label>
+              رمز عبور
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            </label>
+            <button type="submit" disabled={loading} onClick={playSound}>
+              {loading ? 'در حال ورود...' : 'ورود به پنل'}
+            </button>
+          </form>
+
+          <div className="support-link">
+            🛟 PompNet Support
+            <span>Telegram: @NuvoraAzad980</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="dashboard-shell">
+      <aside className="sidebar glass-card">
+        <div className="logo-block">
+          <div className="logo-mark">P</div>
+          <div>
+            <div className="logo-title">PompNet</div>
+            <div className="logo-subtitle">Mohammad PompNet</div>
+          </div>
+        </div>
+
+        <nav className="nav">
+          <button className={`nav-btn ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => { playSound(); setActiveTab('dashboard'); }}>
+            📊 داشبورد
+          </button>
+          <button className={`nav-btn ${activeTab === 'users' ? 'active' : ''}`} onClick={() => { playSound(); setActiveTab('users'); }}>
+            👥 کاربران
+          </button>
+          <button className={`nav-btn ${activeTab === 'inbounds' ? 'active' : ''}`} onClick={() => { playSound(); setActiveTab('inbounds'); }}>
+            🔗 Inbound ها
+          </button>
+          <button className={`nav-btn ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => { playSound(); setActiveTab('settings'); }}>
+            ⚙️ تنظیمات
+          </button>
+        </nav>
+
+        <button className="logout-btn" onClick={logout}>خروج</button>
+      </aside>
+
+      <main className="content-area">
+        <header className="topbar glass-card">
+          <div>
+            <div className="eyebrow">کد نویسی شده توسط تیم پمپ نت</div>
+            <h1>محمد پمپ نت</h1>
+            <div className="tagline">PompNet | Fast • Secure • Unlimited</div>
+          </div>
+          <div className="topbar-status">
+            <span className="status-indicator"></span>
+            {stats.serverStatus}
+          </div>
+        </header>
+
+        {activeTab === 'dashboard' && (
+          <section className="stats-grid">
+            <StatCard icon="👥" title="کاربران" value={stats.totalUsers} accent="blue" tooltip="کل کاربران" />
+            <StatCard icon="🟢" title="فعال" value={stats.activeUsers} accent="green" tooltip="کاربران فعال" />
+            <StatCard icon="🔴" title="غیرفعال" value={stats.disabledUsers} accent="red" tooltip="کاربران غیرفعال" />
+            <StatCard icon="📡" title="آنلاین" value={stats.onlineUsers} accent="purple" tooltip="کاربران آنلاین" />
+            <StatCard icon="📊" title="ترافیک" value={formatBytes(stats.totalTraffic)} accent="cyan" tooltip="ترافیک کل" />
+            <StatCard icon="⏳" title="منقضی" value={stats.expiredUsers} accent="orange" tooltip="کاربران منقضی" />
+            <StatCard icon="🔗" title="Inbound" value={stats.totalInbounds} accent="purple" tooltip="تعداد inbound" />
+            <StatCard icon="🖥" title="سرور" value={stats.serverStatus} accent="blue" tooltip="وضعیت سرور" />
+          </section>
+        )}
+
+        {activeTab === 'users' && (
+          <section className="panel-section glass-card">
+            <div className="section-head">
+              <div>
+                <h2>مدیریت کاربران</h2>
+                <p className="section-desc">کنترل سریع کاربران و وضعیت‌ها</p>
+              </div>
+              <div className="header-actions">
+                <div className="search-box">
+                  <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="جستجو..." />
+                </div>
+                <button className="btn-action" onClick={playSound}><Plus size={18} /> افزودن</button>
+              </div>
+            </div>
+
+            <div className="user-grid">
+              {filteredUsers.length > 0 ? (
+                filteredUsers.map((user) => (
+                  <div className="user-card glass-card" key={user.id}>
+                    <div className="user-topline">
+                      <strong>{user.username}</strong>
+                      <span className={`status-pill ${user.status.toLowerCase()}`}>{user.status}</span>
+                    </div>
+
+                    <div className="user-meta">
+                      <span>{user.protocol}</span>
+                      <span className={user.online ? 'online' : 'offline'}>{user.online ? '🟢 آنلاین' : '⚪ آفلاین'}</span>
+                      <span>{user.connections} اتصال</span>
+                    </div>
+
+                    <div className="mini-grid">
+                      <div>
+                        <label>مصرف</label>
+                        <strong>{formatBytes(user.trafficUsed)}</strong>
+                      </div>
+                      <div>
+                        <label>باقی‌مانده</label>
+                        <strong>{formatBytes(user.trafficRemaining)}</strong>
+                      </div>
+                      <div>
+                        <label>انقضا</label>
+                        <strong>{user.expiryDate ? new Date(user.expiryDate).toLocaleDateString('fa-IR') : 'نامحدود'}</strong>
+                      </div>
+                    </div>
+
+                    <div className="user-actions">
+                      <ActionButton icon={<Copy size={16} />} label="کپی" onClick={playSound} />
+                      <ActionButton icon={<QrCode size={16} />} label="QR" onClick={playSound} />
+                      <ActionButton icon={<LinkIcon size={16} />} label="لینک" onClick={playSound} />
+                      <ActionButton icon={<Edit2 size={16} />} label="ویرایش" onClick={playSound} />
+                      <ActionButton icon={<Trash2 size={16} />} label="حذف" onClick={playSound} danger />
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="empty-state">هیچ کاربری پیدا نشد.</div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {activeTab === 'inbounds' && (
+          <section className="panel-section glass-card">
+            <div className="section-head">
+              <div>
+                <h2>Inbound ها</h2>
+                <p className="section-desc">درگاه‌های ورودی و پروتکل‌ها</p>
+              </div>
+              <button className="btn-action" onClick={playSound}><Plus size={18} /> افزودن</button>
+            </div>
+
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>نام</th>
+                    <th>پروتکل</th>
+                    <th>پورت</th>
+                    <th>وضعیت</th>
+                    <th>ترافیک</th>
+                    <th>اقدام</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inbounds.map((inbound) => (
+                    <tr key={inbound.id}>
+                      <td>{inbound.name}</td>
+                      <td><span className="protocol-badge">{inbound.protocol}</span></td>
+                      <td>{inbound.port}</td>
+                      <td><span className={`status-badge ${inbound.status.toLowerCase()}`}>{inbound.status}</span></td>
+                      <td>{formatBytes(inbound.trafficUsed)}</td>
+                      <td>
+                        <div className="table-actions">
+                          <button className="btn-small" onClick={playSound}>✏️</button>
+                          <button className="btn-small danger" onClick={playSound}>🗑️</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {activeTab === 'settings' && (
+          <section className="panel-section glass-card">
+            <div className="section-head">
+              <div>
+                <h2>تنظیمات</h2>
+                <p className="section-desc">پیکربندی سریع پنل</p>
+              </div>
+            </div>
+
+            <div className="settings-grid">
+              <SettingCard title="مدیر" description="تغییر رمز عبور" />
+              <SettingCard title="CORS" description="دسترسی‌های ورودی" />
+              <SettingCard title="دیتابیس" description="اتصال PostgreSQL" />
+              <SettingCard title="احراز هویت" description="JWT و امنیت" />
+            </div>
+          </section>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function StatCard({ icon, title, value, accent, tooltip }: { icon: string; title: string; value: string | number; accent: string; tooltip?: string }) {
+  return (
+    <div className={`stat-card glass-card ${accent}`} onClick={playClickSound} title={tooltip}>
+      <div className="icon-wrap">{icon}</div>
+      <div>
+        <div className="stat-title">{title}</div>
+        <div className="stat-value">{value}</div>
+      </div>
+    </div>
+  );
+}
+
+function ActionButton({ icon, label, onClick, danger }: { icon: ReactNode; label: string; onClick: () => void; danger?: boolean }) {
+  return (
+    <button className={`action-btn glass-card ${danger ? 'danger' : ''}`} onClick={onClick}>
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function SettingCard({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="setting-card glass-card">
+      <div>
+        <h3>{title}</h3>
+        <p>{description}</p>
+      </div>
+      <button className="btn-action" onClick={playClickSound}>تنظیم</button>
+    </div>
+  );
+}
+
